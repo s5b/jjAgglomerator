@@ -1,4 +1,4 @@
-# etl
+# jjAgglomerator
 
 This code is an exercise in learning something new. It is an experiment at creating 
 a filter to combine a group of `.csv` files into a single file while eliminating duplicates.
@@ -13,35 +13,19 @@ You need to have `leiningen` installed to work with the code
 
 ## Usage
 
-You can run the application by typing:
+You can find instructions on how to run the application by running the following command:
 
-    lein run ./data/raw/savings-2012-2013-20130611.csv  ./data/raw/savings-2014-2015-20150826.csv
+    lein run -- --help
     
-This will process the two `.csv` files, to `stdout`
+This will print out a help message describing the parameters that can be supplied to the application.
 
-FIXME: explanation
+The application can be run standalone by running the produced `.jar` file as follows
 
-    $ java -jar etl-0.1.0-standalone.jar [args]
+    $ java -jar jjAgglomerator-0.1.0-standalone.jar [args]
 
-## Options
-
-FIXME: listing of options this app accepts.
-
-## Examples
-
-...
-
-### Bugs
-
-...
-
-### Any Other Sections
-### That You Think
-### Might be Useful
 
 ## License
 
 Copyright © 2015 s5b
 
-Distributed under the Eclipse Public License either version 1.0 or (at
-your option) any later version.
+Distributed under the Apache 2 License.
