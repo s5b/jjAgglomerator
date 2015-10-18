@@ -2,7 +2,8 @@
   (:gen-class)
   (:use [digest] :reload-all)
   (:import (java.time.format DateTimeFormatter)
-           (java.time LocalDate ZoneId)))
+           (java.time LocalDate ZoneId)
+           (java.io File)))
 
 (require '[clojure.string :as str]
          '[clojure.data.csv :as csv]
@@ -16,6 +17,15 @@
 ;; Define the data keys.
 
 (def account-keys #{:savings :viridian})
+
+
+
+; Diagnostics.
+
+(def chatty false)
+
+(defn alert [message]
+  (if chatty (println message)))
 
 
 
@@ -70,6 +80,7 @@
 
 (defn validate-accounts [candidate-accounts]
   ; Add code here to validate the contents of the account file.
+  (alert (str "Validating accounts: " candidate-accounts))
   candidate-accounts)
 
 (defn x-group-by
@@ -86,7 +97,7 @@
 (defn read-accounts [pathname]
   (if (.exists (io/as-file pathname))
     (with-open [rdr (io/reader pathname)]
-      (let [candidate-accounts (json/read rdr :eof-error? false :eof-value empty-accounts :key-fn keyword)]
+      (let [candidate-accounts (json/read rdr :eof-error? false :eof-value empty-accounts :key-fn keyword :bigdec true)]
         (validate-accounts candidate-accounts)))
     empty-accounts))
 
@@ -98,7 +109,7 @@
 
 
 
-;; Process the input files.
+;; Process the input lines.
 
 (def index-when 0)
 (def index-amount 1)
@@ -124,8 +135,8 @@
         when-human (nth columns index-when)
         when-epoch (to-epoch when-human)
         origin "-unknown-"
-        amount (BigDecimal. (nth columns index-amount))
-        expected-balance (BigDecimal. (nth columns index-balance))
+        amount (BigDecimal. (.toString (nth columns index-amount)))
+        expected-balance (BigDecimal. (.toString (nth columns index-balance)))
         description (nth columns index-description)
         entry {:account          (name account)
                :when-epoch       when-epoch
@@ -140,10 +151,14 @@
                :raw              line}
         added-entry (update-in accounts [:serialised-accounts] conj entry)
         added-key (update-in added-entry [:keyed-hashes account] conj line-hash)]
+    (print " " (type (entry :amount)))
     added-key))
 
 (defn digest-line [line]
   (digest/sha-256 (str/lower-case (str/replace (str/trim line) #"\s+" " "))))
+
+
+;; Process the files.
 
 (defn process-file [accounts filename account]
   (with-open [rdr (io/reader filename)]
@@ -154,39 +169,67 @@
         (do
           (let [line (first all-lines)
                 line-hash (digest-line line)]
-            (println prefix-1 line)
+            (alert (str prefix-1 line))
             (recur (rest all-lines)
                    (if (contains? (get-in accounts [:keyed-hashes account]) line-hash)
                      (do
-                       (println prefix-2 "**** Ignoring duplicate line ***")
+                       (alert (str prefix-2 "**** Ignoring duplicate line ***"))
                        accumulated-accounts)
                      (process-line line line-hash account accumulated-accounts)))))))))
 
+(defn process-filename [accounts filename]
+  (alert (str "Candidate filename: " filename))
+  (if-let [parts (re-matches input-filename-pattern filename)]
+    (process-file accounts filename (get parts 2))
+    (println " -- Unrecognised filename: IGNORED!")))
 
-  (defn process-filename [accounts filename]
-    (println (str "Candidate filename: " filename))
-    (if-let [parts (re-matches input-filename-pattern filename)]
-      (process-file accounts filename (get parts 2))
-      (println " -- Unrecognised filename: IGNORED!")))
+(defn process-filenames [filenames-to-process accounts]
+  (loop [filenames filenames-to-process
+         accumulated-accounts accounts]
+    (if-not (seq filenames)
+      accumulated-accounts
+      (recur (rest filenames) (process-filename accumulated-accounts (first filenames))))))
 
 
+;; Save the results.
 
-  ;; Run the whole sh'bang-a-bang.
+(defn rename-existing-pathname [^String pathname]
+  ;; FIXME: if the path name exists only.
+  (let [base-pathname (str/replace pathname #"[.]json$" "")
+        versioned-pathname (str base-pathname "-" (System/currentTimeMillis) ".json")]
+    (.renameTo (File. pathname) (File. versioned-pathname))))
 
-  (defn -main
-    "Combine raw transaction files. Example command: lein run -- `ls ./data/raw/*.csv` savings-2014-2015-20150607.csv"
-    [& args]
-    (let [{:keys [options arguments errors summary]} (parse-opts args cli-options)]
-      (cond
-        (:help options) (exit 0 (usage summary))
-        (< (count arguments) 0) (exit 1 (usage summary))
-        errors (exit 1 (str (error-msg errors) \newline \newline (usage summary))))
-      ;; Let the processing begin ...
-      (let [accounts (init-accounts (:data-file options))]
-        (println (str "Initial accounts: " accounts))
-        (loop [filenames arguments
-               accumulated-accounts accounts]
-          (when (seq filenames)
-            (recur (rest filenames) (process-filename accumulated-accounts (first filenames)))))
-      (println "---------------------------")
-      (println options))))
+(defn persist-accounts [pathname accounts]
+  (with-open [wrtr (io/writer pathname)]
+    (json/write accounts wrtr)))
+
+
+;; Calculate the expected balance.
+
+(defn calculate-balance [type, accounts]
+  (->> accounts
+       (filter #(= (:account %1) type))
+       (map :amount)
+       (reduce #(.add %2 %1) (BigDecimal/ZERO))))
+
+
+;; Run the whole sh'bang-a-bang.
+
+(defn -main
+  "Combine raw transaction files. Example command: lein run -- `ls ./data/raw/*.csv` savings-2014-2015-20150607.csv"
+  [& args]
+  (let [{:keys [options arguments errors summary]} (parse-opts args cli-options)]
+    (cond
+      (:help options) (exit 0 (usage summary))
+      (< (count arguments) 0) (exit 1 (usage summary))
+      errors (exit 1 (str (error-msg errors) \newline \newline (usage summary))))
+    ;; Let the processing begin ...
+    (let [accounts-path (:data-file options)
+          accounts (init-accounts accounts-path)
+          updated-accounts (process-filenames arguments accounts)]
+      (rename-existing-pathname accounts-path)
+      (alert updated-accounts)
+      (let [all-accounts (get-in updated-accounts [:serialised-accounts])]
+        (persist-accounts accounts-path all-accounts)
+        (println " Savings balance: " (calculate-balance "savings" all-accounts))
+        (println "Viridian balance: " (calculate-balance "viridian" all-accounts))))))
