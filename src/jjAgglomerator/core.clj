@@ -12,6 +12,8 @@
          '[digest :as digest]
          '[clojure.tools.cli :refer [parse-opts]])
 
+(use '[jjAgglomerator.classifier :as cl])
+
 
 
 ;; Define the data keys.
@@ -111,11 +113,6 @@
 
 ;; Process the input lines.
 
-(def index-when 0)
-(def index-amount 1)
-(def index-description 2)
-(def index-balance 3)
-
 (def when-format (DateTimeFormatter/ofPattern "dd/MM/yyyy"))
 (def when-timezone (ZoneId/systemDefault))
 
@@ -132,17 +129,17 @@
 (defn process-line [line line-hash account accounts]
   (let [seq-columns (csv/read-csv line)
         columns (nth seq-columns 0)
-        when-human (nth columns index-when)
+        [when-human raw-amount description raw-expected-balance] columns
         when-epoch (to-epoch when-human)
-        origin "-unknown-"
-        amount (BigDecimal. (.toString (nth columns index-amount)))
-        expected-balance (BigDecimal. (.toString (nth columns index-balance)))
-        description (nth columns index-description)
+        ;origin "-unknown-"
+        amount (BigDecimal. (.toString raw-amount))
+        expected-balance (BigDecimal. (.toString raw-expected-balance))
+        [origin tags] (cl/classify account description amount)
         entry {:account          (name account)
                :when-epoch       when-epoch
                :when-human       when-human
                :origin           origin
-               :tags             []
+               :tags             tags
                :amount           amount
                :expected-balance expected-balance
                :hash             line-hash
@@ -151,7 +148,6 @@
                :raw              line}
         added-entry (update-in accounts [:serialised-accounts] conj entry)
         added-key (update-in added-entry [:keyed-hashes account] conj line-hash)]
-    (print " " (type (entry :amount)))
     added-key))
 
 (defn digest-line [line]
