@@ -34,6 +34,8 @@
     (is (= ["classic" ["bodycorp"]] (jja/classify "viridian" "BL BCR MANAGEMEN BL BCR MAANGEMENT" negative-amount))))
   (testing "Given the account is viridian, the amount is negative, and the description contains 'BL BCR MANAGEMEN CRM MANAGEM'"
     (is (= ["classic" ["bodycorp"]] (jja/classify "viridian" "Direct Debit 126817 BL BCR MANAGEMEN BL BCR MAANGEMENT" negative-amount))))
+  (testing "Given the account is viridian, the amount is negative, and the description contains 'BRIGHTON CLASSIC'"
+    (is (= ["classic" ["bodycorp"]] (jja/classify "viridian" "Direct Debit 479537 BRIGHTON CLASSIC RL0020179" negative-amount))))
 
   (testing "Given the account is viridian, the amount is positive, and the description starts with 'NETBANK TFR' and contains 'interest'"
     (is (= ["admin" ["repayment"]] (jja/classify "viridian" "NETBANK TFR Viridian interest" positive-amount))))

@@ -41,6 +41,7 @@
     #"DEBIT INT TO \d+ (JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)" [source-bank ["interest"]]
     #"(?i)Debit Interest"                                                 [source-bank ["interest"]]
     #".*BL BCR MANAGEMEN .*"                                              [source-classic ["bodycorp"]]
+    #".*BRIGHTON CLASSIC.*"                                               [source-classic ["bodycorp"]]
     unknown))
 
 (defn- classify-viridian [description amount]
